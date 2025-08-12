@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes'
 import apiRoutes from './routes/apiRoutes'
 import keyRoutes from './routes/keyRoutes'
 import proxyRoutes from './routes/proxyRoutes'
+import { testConnection } from './config/db'
 
 const app = express()
 
@@ -22,4 +23,5 @@ app.use('/proxy', proxyRoutes)
 const PORT = process.env.PORT || 4000
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
+    testConnection()
 })
