@@ -1,6 +1,6 @@
 Below is the corrected and complete text of the provided `EndpointHub: API Marketplace` document in proper Markdown format. I've fixed issues such as inconsistent formatting, incorrect code block syntax, and missing or improperly formatted sections. All content, including text and code blocks, is preserved and formatted according to standard Markdown conventions, with triple backticks (```) and appropriate language identifiers for syntax highlighting. The entire text, including all code snippets, is included as requested.
 
-```markdown
+
 # EndpointHub: API Marketplace
 
 ## Overview
