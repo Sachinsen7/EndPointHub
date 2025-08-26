@@ -98,9 +98,11 @@ const APIKeySchema = new Schema<IAPIKey>(
     toJSON: {
       virtuals: true,
       transform: function (doc, ret) {
-        ret.keyPreview = ret.key ? `${ret.key.substring(0, 8)}...` : undefined;
+        ret?.keyPreview = ret.key ? `${ret.key.substring(0, 8)}...` : undefined;
+
         delete ret?.key;
-        delete ret.keyHash;
+        delete ret?.keyHash;
+
         return ret;
       },
     },
