@@ -25,7 +25,7 @@ export interface IUser extends Document {
   generateEmailVerificationToken(): string;
 }
 
-const userSchema = new Schema<IUser>(
+const UserSchema = new Schema<IUser>(
   {
     email: {
       type: String,
@@ -105,3 +105,48 @@ const userSchema = new Schema<IUser>(
     toJSON: { virtuals: true },
   }
 );
+
+UserSchema.index({ email: 1 }, { unique: true });
+UserSchema.index({ role: 1 });
+UserSchema.index({ isActive: 1 });
+UserSchema.index({ createdAt: -1 });
+
+UserSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+
+  try {
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error as Error);
+  }
+});
+
+UserSchema.methods.comparePassword = async function (
+  candidatePassword: string
+): Promise<boolean> {
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+UserSchema.methods.generatePasswordResetToken = function (): string {
+  const resetToken = require("crypto").randomBytes(32).toString("hex");
+  this.passwordResetToken = require("crypto")
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+  this.passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  return resetToken;
+};
+
+UserSchema.methods.generateEmailVerificationToken = function (): string {
+  const verifyToken = require("crypto").randomBytes(32).toString("hex");
+  this.emailVerificationToken = require("crypto")
+    .createHash("sha256")
+    .update(verifyToken)
+    .digest("hex");
+  return verifyToken;
+};
+
+export const User =
+  mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
