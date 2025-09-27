@@ -163,3 +163,109 @@ export const checkDBHealth = async () => {
         };
     }
 };
+
+export const withTransaction = async <T>(
+    fn: (
+        prisma: Omit<
+            PrismaClient,
+            '$connect' | '$disconnect' | '$on' | '$transaction' | '$use'
+        >
+    ) => Promise<T>,
+    options: {
+        maxWait?: number;
+        timeout?: number;
+        isolationLevel?: Prisma.TransactionClient;
+        retries?: number;
+    } = {}
+): Promise<T> => {
+    const {
+        maxWait = 5000,
+        timeout = 10000,
+        isolationLevel,
+        retries = 3,
+    } = options;
+
+    let lastError: Error;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return await prisma.$transaction(fn, {
+                maxWait,
+                timeout,
+                isolationLevel,
+            });
+        } catch (error) {
+            lastError = error as Error;
+            logger.warn(
+                `Transaction attempt ${attempt}/${retries} failed:`,
+                error
+            );
+
+            if (attempt === retries) {
+                break;
+            }
+
+            // Exponential backoff
+            const delay = Math.pow(2, attempt - 1) * 1000;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+    }
+
+    throw lastError!;
+};
+
+export const bulkOperation = async <T>(
+    operation: (batch: T[]) => Promise<any>,
+    data: T[],
+    batchSize = 1000
+): Promise<void> => {
+    const batches = [];
+    for (let i = 0; i < data.length; i += batchSize) {
+        batches.push(data.slice(i, i + batchSize));
+    }
+
+    for (const batch of batches) {
+        await operation(batch);
+    }
+};
+
+export const getConnectionStatus = () => ({
+    isConnected,
+    attempts: connectionAttempts,
+    maxAttempts: MAX_CONNECTION_ATTEMPTS,
+    client: prisma,
+});
+
+if (typeof window === 'undefined') {
+    connectDB().catch((error) => {
+        logger.error('Failed to initialize database connection:', error);
+    });
+}
+
+if (typeof window === 'undefined') {
+    const gracefulShutdown = async (signal: string) => {
+        logger.info(`${signal} received, closing database connection...`);
+        try {
+            await disconnectDB();
+            process.exit(0);
+        } catch (error) {
+            logger.error('Error during graceful shutdown:', error);
+            process.exit(1);
+        }
+    };
+
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+    process.on('uncaughtException', async (error) => {
+        logger.error('Uncaught Exception:', error);
+        await disconnectDB();
+        process.exit(1);
+    });
+
+    process.on('unhandledRejection', async (reason, promise) => {
+        logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        await disconnectDB();
+        process.exit(1);
+    });
+}
