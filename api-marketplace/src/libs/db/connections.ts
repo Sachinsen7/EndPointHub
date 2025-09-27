@@ -122,3 +122,44 @@ export const disconnectDB = async () => {
         throw error;
     }
 };
+
+export const checkDBHealth = async () => {
+    const startTime = Date.now();
+
+    try {
+        await prisma.$queryRaw`SELECT 1 as test`;
+
+        const testWrite = await prisma.$queryRaw`SELECT NOW() as current_time`;
+        const stats = await prisma.$queryRaw`
+      SELECT 
+        (SELECT count(*) FROM users) as user_count,
+        (SELECT count(*) FROM apis) as api_count,
+        (SELECT count(*) FROM usage WHERE timestamp > NOW() - INTERVAL '1 hour') as recent_usage
+    `;
+
+        const responseTime = Date.now() - startTime;
+
+        return {
+            status: 'healthy',
+            timestamp: new Date(),
+            responseTime: `${responseTime}ms`,
+            stats,
+            connection: {
+                isConnected,
+                attempts: connectionAttempts,
+            },
+        };
+    } catch (error: any) {
+        logger.error('Database health check failed:', error);
+        return {
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date(),
+            responseTime: `${Date.now() - startTime}ms`,
+            connection: {
+                isConnected,
+                attempts: connectionAttempts,
+            },
+        };
+    }
+};
