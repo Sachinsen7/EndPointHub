@@ -193,6 +193,15 @@ enum ApiCategory {
   @@map("api_category")
 }
 
+enum ApiStatus {
+  ACTIVE
+  INACTIVE
+  DEPRECATED
+  MAINTENANCE
+
+  @@map("api_status")
+}
+
 enum HttpMethod {
   GET
   POST
