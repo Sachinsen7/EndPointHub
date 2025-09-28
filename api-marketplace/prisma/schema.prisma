@@ -9,69 +9,101 @@ datasource db {
 }
 
 model User {
-  id                String         @id @default(uuid()) @db.Uuid
-  email             String         @unique @db.VarChar(255)
-  password          String         @db.VarChar(255)
-  firstName         String         @map("first_name") @db.VarChar(100)
-  lastName          String         @map("last_name") @db.VarChar(100)
-  company           String?        @db.VarChar(255)
-  bio               String?
-  website           String?        @db.VarChar(500)
-  avatar            String?        @db.VarChar(500)
-  role              UserRole       @default(USER)
-  isActive          Boolean        @default(true) @map("is_active")
-  emailVerified     Boolean        @default(false) @map("email_verified")
-  verificationToken String?        @map("verification_token") @db.VarChar(255)
-  resetToken        String?        @map("reset_token") @db.VarChar(255)
-  resetTokenExpiry  DateTime?      @map("reset_token_expiry") @db.Timestamptz(6)
-  lastLoginAt       DateTime?      @map("last_login_at") @db.Timestamptz(6)
-  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
-  apiKeys           ApiKey[]
-  apis              Api[]
-  refreshTokens     RefreshToken[]
-  reviews           Review[]
-  subscriptions     Subscription[]
-  usage             Usage[]
+  id                String    @id @default(uuid()) @db.Uuid
+  email             String    @unique @db.VarChar(255)
+  password          String    @db.VarChar(255)
+  firstName         String    @map("first_name") @db.VarChar(100)
+  lastName          String    @map("last_name") @db.VarChar(100)
+  company           String?   @db.VarChar(255)
+  bio               String?   @db.Text
+  website           String?   @db.VarChar(500)
+  avatar            String?   @db.VarChar(500)
+  role              UserRole  @default(USER)
+  isActive          Boolean   @default(true) @map("is_active")
+  emailVerified     Boolean   @default(false) @map("email_verified")
+  verificationToken String?   @map("verification_token") @db.VarChar(255)
+  resetToken        String?   @map("reset_token") @db.VarChar(255)
+  resetTokenExpiry  DateTime? @map("reset_token_expiry") @db.Timestamptz(6)
+  lastLoginAt       DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  // Relations
+  apis          Api[]
+  apiKeys       ApiKey[]
+  subscriptions Subscription[]
+  usage         Usage[]
+  refreshTokens RefreshToken[]
+  reviews       Review[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
   @@index([email])
   @@index([isActive, emailVerified])
-  @@map("users")
+  @@index([createdAt])
 }
 
 model Api {
-  id            String         @id @default(uuid()) @db.Uuid
-  name          String         @db.VarChar(255)
-  description   String
-  baseUrl       String         @map("base_url") @db.VarChar(500)
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @db.VarChar(255)
+  description   String   @db.Text
+  baseUrl       String   @map("base_url") @db.VarChar(500)
   category      ApiCategory
-  version       String         @default("1.0.0") @db.VarChar(20)
-  slug          String         @unique @db.VarChar(255)
-  isPublic      Boolean        @default(true) @map("is_public")
-  isActive      Boolean        @default(true) @map("is_active")
-  tags          String[]       @db.VarChar(50)
-  documentation String?
-  pricing       Json
-  rating        Decimal        @default(0) @db.Decimal(3, 2)
-  totalRequests BigInt         @default(0) @map("total_requests")
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
-  ownerId       String         @map("owner_id") @db.Uuid
-  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  reviews       Review[]
+  version       String   @default("1.0.0") @db.VarChar(20)
+  slug          String   @unique @db.VarChar(255)
+  isPublic      Boolean  @default(true) @map("is_public")
+  isActive      Boolean  @default(true) @map("is_active")
+  tags          String[] @db.VarChar(50)
+  documentation String?  @db.Text
+  pricing       Json     @db.JsonB
+  metadata      Json?    @default("{}") @db.JsonB
+  rating        Decimal  @default(0) @db.Decimal(3, 2)
+  totalRequests BigInt   @default(0) @map("total_requests") @db.BigInt
+  status        ApiStatus @default(ACTIVE)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  ownerId       String        @map("owner_id") @db.Uuid
+  owner         User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   subscriptions Subscription[]
   usage         Usage[]
+  reviews       Review[]
+  endpoints     Endpoint[]
 
+  @@map("apis")
   @@index([ownerId])
   @@index([category])
   @@index([isPublic, isActive])
-  @@map("apis")
+  @@index([slug])
+  @@index([createdAt])
+  @@index([rating])
+}
+
+model Endpoint {
+  id          String       @id @default(uuid()) @db.Uuid
+  path        String       @db.VarChar(500)
+  method      HttpMethod
+  description String?      @db.Text
+  parameters  Json?        @db.JsonB
+  responses   Json?        @db.JsonB
+  isActive    Boolean      @default(true) @map("is_active")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  apiId String @map("api_id") @db.Uuid
+  api   Api    @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
+  @@map("endpoints")
+  @@unique([apiId, path, method])
+  @@index([apiId])
 }
 
 model ApiKey {
   id          String    @id @default(uuid()) @db.Uuid
   name        String    @db.VarChar(255)
-  description String?
+  description String?   @db.Text
   key         String    @unique @db.VarChar(255)
   keyHash     String    @map("key_hash") @db.VarChar(255)
   permissions String[]  @default(["READ"]) @db.VarChar(50)
@@ -81,13 +113,16 @@ model ApiKey {
   rateLimit   Int       @default(1000) @map("rate_limit")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  userId      String    @map("user_id") @db.Uuid
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usage       Usage[]
 
+  // Relations
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usage  Usage[]
+
+  @@map("api_keys")
   @@index([userId])
   @@index([key])
-  @@map("api_keys")
+  @@index([isActive, expiresAt])
 }
 
 model Subscription {
@@ -100,36 +135,53 @@ model Subscription {
   startDate     DateTime         @default(now()) @map("start_date") @db.Timestamptz(6)
   expiresAt     DateTime?        @map("expires_at") @db.Timestamptz(6)
   canceledAt    DateTime?        @map("canceled_at") @db.Timestamptz(6)
+  metadata      Json?            @default("{}") @db.JsonB
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  userId        String           @map("user_id") @db.Uuid
-  apiId         String           @map("api_id") @db.Uuid
-  api           Api              @relation(fields: [apiId], references: [id], onDelete: Cascade)
-  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, apiId])
+  // Relations
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiId  String @map("api_id") @db.Uuid
+  api    Api    @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
   @@map("subscriptions")
+  @@unique([userId, apiId])
+  @@index([userId])
+  @@index([apiId])
+  @@index([isActive, expiresAt])
 }
 
-model Usage {
-  id           String     @id @default(uuid()) @db.Uuid
-  method       HttpMethod
-  path         String     @db.VarChar(1000)
-  statusCode   Int        @map("status_code") @db.SmallInt
-  responseTime Int        @map("response_time")
-  userAgent    String?    @map("user_agent") @db.VarChar(500)
-  ipAddress    String?    @map("ip_address") @db.Inet
-  timestamp    DateTime   @default(now()) @db.Timestamptz(6)
-  userId       String     @map("user_id") @db.Uuid
-  apiId        String     @map("api_id") @db.Uuid
-  apiKeyId     String?    @map("api_key_id") @db.Uuid
-  api          Api        @relation(fields: [apiId], references: [id], onDelete: Cascade)
-  apiKey       ApiKey?    @relation(fields: [apiKeyId], references: [id])
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+model Usage {
+  id           String    @id @default(uuid()) @db.Uuid
+  method       HttpMethod
+  path         String    @db.VarChar(1000)
+  statusCode   Int       @map("status_code") @db.SmallInt
+  responseTime Int       @map("response_time") @db.Integer
+  requestSize  BigInt?   @map("request_size") @db.BigInt
+  responseSize BigInt?   @map("response_size") @db.BigInt
+  userAgent    String?   @map("user_agent") @db.VarChar(500)
+  ipAddress    String?   @map("ip_address") @db.Inet
+  country      String?   @db.VarChar(2)
+  region       String?   @db.VarChar(100)
+  timestamp    DateTime  @default(now()) @db.Timestamptz(6)
+  metadata     Json?     @default("{}") @db.JsonB
+
+  // Relations
+  userId   String  @map("user_id") @db.Uuid
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiId    String  @map("api_id") @db.Uuid
+  api      Api     @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  apiKeyId String? @map("api_key_id") @db.Uuid
+  apiKey   ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@map("usage")
   @@index([userId, timestamp(sort: Desc)])
   @@index([apiId, timestamp(sort: Desc)])
-  @@map("usage")
+  @@index([apiKeyId, timestamp(sort: Desc)])
+  @@index([timestamp(sort: Desc)])
+  @@index([statusCode, timestamp])
 }
 
 model RefreshToken {
@@ -139,27 +191,57 @@ model RefreshToken {
   expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
   isRevoked Boolean  @default(false) @map("is_revoked")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  userId    String   @map("user_id") @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  // Relations
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("refresh_tokens")
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
 }
 
 model Review {
   id        String   @id @default(uuid()) @db.Uuid
   rating    Int      @db.SmallInt
-  comment   String?
+  comment   String?  @db.Text
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  userId    String   @map("user_id") @db.Uuid
-  apiId     String   @map("api_id") @db.Uuid
-  api       Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, apiId])
+  // Relations
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiId  String @map("api_id") @db.Uuid
+  api    Api    @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
   @@map("reviews")
+  @@unique([userId, apiId])
+  @@index([apiId])
+  @@index([rating])
+}
+
+
+model AuditLog {
+  id        String     @id @default(uuid()) @db.Uuid
+  action    AuditAction
+  resource  String     @db.VarChar(100)
+  resourceId String?   @map("resource_id") @db.Uuid
+  oldValues Json?      @map("old_values") @db.JsonB
+  newValues Json?      @map("new_values") @db.JsonB
+  ipAddress String?    @map("ip_address") @db.Inet
+  userAgent String?    @map("user_agent") @db.VarChar(500)
+  timestamp DateTime   @default(now()) @db.Timestamptz(6)
+
+  // Relations
+  userId String? @map("user_id") @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+  @@index([userId, timestamp(sort: Desc)])
+  @@index([resource, resourceId])
+  @@index([timestamp(sort: Desc)])
 }
 
 enum UserRole {
@@ -172,23 +254,23 @@ enum UserRole {
 }
 
 enum ApiCategory {
-  AI_ML
-  DATA
-  FINANCE
-  SOCIAL
-  ECOMMERCE
-  PRODUCTIVITY
-  DEVELOPER_TOOLS
-  COMMUNICATION
-  MULTIMEDIA
-  LOCATION
-  WEATHER
-  NEWS
-  SPORTS
-  GAMING
-  HEALTHCARE
-  EDUCATION
-  OTHER
+  AI_ML          @map("ai_ml")
+  DATA           @map("data")
+  FINANCE        @map("finance")
+  SOCIAL         @map("social")
+  ECOMMERCE      @map("ecommerce")
+  PRODUCTIVITY   @map("productivity")
+  DEVELOPER_TOOLS @map("developer_tools")
+  COMMUNICATION  @map("communication")
+  MULTIMEDIA     @map("multimedia")
+  LOCATION       @map("location")
+  WEATHER        @map("weather")
+  NEWS           @map("news")
+  SPORTS         @map("sports")
+  GAMING         @map("gaming")
+  HEALTHCARE     @map("healthcare")
+  EDUCATION      @map("education")
+  OTHER          @map("other")
 
   @@map("api_category")
 }
@@ -228,4 +310,15 @@ enum BillingPeriod {
   YEARLY
 
   @@map("billing_period")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  API_CALL
+
+  @@map("audit_action")
 }
