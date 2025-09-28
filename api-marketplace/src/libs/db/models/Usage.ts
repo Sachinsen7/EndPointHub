@@ -1,125 +1,132 @@
-import mongoose, { Schema, Document } from "mongoose";
+import { prisma } from '../connections';
+import { Prisma, HttpMethod } from '@/generated/prisma';
 
-export interface IUsage extends Document {
-  _id: string;
-  userId?: mongoose.Types.ObjectId;
-  apiId: mongoose.Types.ObjectId;
-  apiKeyId?: mongoose.Types.ObjectId;
-  subscriptionId?: mongoose.Types.ObjectId;
-  method: string;
-  path: string;
-  statusCode: number;
-  responseTime: number;
-  requestSize: number;
-  responseSize: number;
-  userAgent?: string;
-  ip: string;
-  country?: string;
-  error?: string;
-  timestamp: Date;
-  date: string; // YYYY-MM-DD for aggregation
-  hour: string; // YYYY-MM-DDTHH for aggregation
+export class UsageModel {
+    static async create(data: Prisma.UsageCreateInput) {
+        return prisma.usage.create({ data });
+    }
+
+    static async bulkCreate(data: Prisma.UsageCreateInput[]) {
+        return prisma.usage.createMany({ data, skipDuplicates: true });
+    }
+
+    static async getAnalytics(params: {
+        userId?: string;
+        apiId?: string;
+        startDate: Date;
+        endDate: Date;
+        groupBy?: 'hour' | 'day' | 'month';
+    }) {
+        const { userId, apiId, startDate, endDate, groupBy = 'day' } = params;
+
+        // Build the date truncation expression
+        let dateTrunc: Prisma.Sql;
+        switch (groupBy) {
+            case 'hour':
+                dateTrunc = Prisma.sql`DATE_TRUNC('hour', timestamp)`;
+                break;
+            case 'month':
+                dateTrunc = Prisma.sql`DATE_TRUNC('month', timestamp)`;
+                break;
+            default:
+                dateTrunc = Prisma.sql`DATE_TRUNC('day', timestamp)`;
+        }
+
+        const whereClause = Prisma.sql`
+          WHERE timestamp >= ${startDate}::timestamp 
+          AND timestamp <= ${endDate}::timestamp
+          ${userId ? Prisma.sql`AND user_id = ${userId}::uuid` : Prisma.empty}
+          ${apiId ? Prisma.sql`AND api_id = ${apiId}::uuid` : Prisma.empty}
+        `;
+
+        return prisma.$queryRaw`
+          SELECT 
+            ${dateTrunc} as period,
+            COUNT(*)::int as request_count,
+            COUNT(CASE WHEN status_code >= 400 THEN 1 END)::int as error_count,
+            AVG(response_time)::int as avg_response_time,
+            MIN(response_time)::int as min_response_time,
+            MAX(response_time)::int as max_response_time
+          FROM usage 
+          ${whereClause}
+          GROUP BY ${dateTrunc}
+          ORDER BY period ASC
+        `;
+    }
+
+    static async getTopApis(params: {
+        startDate: Date;
+        endDate: Date;
+        limit?: number;
+    }) {
+        const { startDate, endDate, limit = 10 } = params;
+
+        return prisma.$queryRaw`
+          SELECT 
+            a.id,
+            a.name,
+            a.category,
+            COUNT(u.id)::int as request_count,
+            COUNT(CASE WHEN u.status_code >= 400 THEN 1 END)::int as error_count,
+            AVG(u.response_time)::int as avg_response_time,
+            COUNT(DISTINCT u.user_id)::int as unique_users
+          FROM usage u
+          JOIN apis a ON u.api_id = a.id
+          WHERE u.timestamp >= ${startDate}::timestamp 
+          AND u.timestamp <= ${endDate}::timestamp
+          AND a.is_active = true
+          GROUP BY a.id, a.name, a.category
+          ORDER BY request_count DESC
+          LIMIT ${limit}
+        `;
+    }
+
+    static async getUserStats(userId: string, days = 30) {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+
+        return prisma.$queryRaw`
+          SELECT 
+            COUNT(*)::int as total_requests,
+            COUNT(CASE WHEN status_code >= 400 THEN 1 END)::int as error_count,
+            AVG(response_time)::int as avg_response_time,
+            COUNT(DISTINCT api_id)::int as unique_apis_used
+          FROM usage 
+          WHERE user_id = ${userId}::uuid
+          AND timestamp >= ${startDate}::timestamp
+        `;
+    }
+
+    static async getApiStats(apiId: string, days = 30) {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+
+        return prisma.$queryRaw`
+          SELECT 
+            COUNT(*)::int as total_requests,
+            COUNT(CASE WHEN status_code >= 400 THEN 1 END)::int as error_count,
+            AVG(response_time)::int as avg_response_time,
+            COUNT(DISTINCT user_id)::int as unique_users
+          FROM usage 
+          WHERE api_id = ${apiId}::uuid
+          AND timestamp >= ${startDate}::timestamp
+        `;
+    }
+
+    static async getRealTimeStats(minutes = 60) {
+        const startTime = new Date();
+        startTime.setMinutes(startTime.getMinutes() - minutes);
+
+        return prisma.$queryRaw`
+          SELECT 
+            DATE_TRUNC('minute', timestamp) as minute,
+            COUNT(*)::int as request_count,
+            AVG(response_time)::int as avg_response_time
+          FROM usage 
+          WHERE timestamp >= ${startTime}::timestamp
+          GROUP BY DATE_TRUNC('minute', timestamp)
+          ORDER BY minute DESC
+          LIMIT ${minutes}
+        `;
+    }
 }
-
-const UsageSchema = new Schema<IUsage>(
-  {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-    apiId: {
-      type: Schema.Types.ObjectId,
-      ref: "API",
-      required: true,
-    },
-    apiKeyId: {
-      type: Schema.Types.ObjectId,
-      ref: "APIKey",
-      default: null,
-    },
-    subscriptionId: {
-      type: Schema.Types.ObjectId,
-      ref: "Subscription",
-      default: null,
-    },
-    method: {
-      type: String,
-      required: true,
-      uppercase: true,
-    },
-    path: {
-      type: String,
-      required: true,
-    },
-    statusCode: {
-      type: Number,
-      required: true,
-    },
-    responseTime: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    requestSize: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    responseSize: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    userAgent: {
-      type: String,
-      maxlength: 500,
-    },
-    ip: {
-      type: String,
-      required: true,
-    },
-    country: {
-      type: String,
-      maxlength: 2,
-    },
-    error: {
-      type: String,
-      maxlength: 1000,
-    },
-    timestamp: {
-      type: Date,
-      default: Date.now,
-    },
-    date: {
-      type: String,
-      required: true,
-    },
-    hour: {
-      type: String,
-      required: true,
-    },
-  },
-  {
-    timestamps: false,
-    toJSON: { virtuals: true },
-  }
-);
-
-UsageSchema.index({ apiId: 1, date: -1 });
-UsageSchema.index({ apiId: 1, hour: -1 });
-UsageSchema.index({ userId: 1, timestamp: -1 });
-UsageSchema.index({ apiKeyId: 1, timestamp: -1 });
-UsageSchema.index({ timestamp: -1 });
-UsageSchema.index({ date: 1 });
-UsageSchema.index({ hour: 1 });
-
-UsageSchema.pre("save", function (next) {
-  const timestamp = this.timestamp || new Date();
-  this.date = timestamp.toISOString().split("T")[0];
-  this.hour = timestamp.toISOString().slice(0, 13);
-  next();
-});
-
-export const Usage =
-  mongoose.models.Usage || mongoose.model<IUsage>("Usage", UsageSchema);
