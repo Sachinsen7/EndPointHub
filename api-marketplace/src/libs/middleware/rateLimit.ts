@@ -1,89 +1,104 @@
-import { NextRequest } from "next/server";
-import { getRedisCLient } from "../redis/client";
-import { config } from "../config/env";
-import { ApiError } from "../utils/error";
+import { NextRequest, NextResponse } from 'next/server';
+import { getRedisCLient } from '../redis/client';
+import { config } from '../config/env';
+import { ApiError } from '../utils/error';
+import { prisma } from '../db/connections';
 
 interface RateLimitOptions {
-  windowMs: number;
-  max: number;
-  keyGenerator?: (req: NextRequest) => string;
-  skipSuccessfulRequests?: boolean;
+    windowMs: number;
+    max: number;
+    keyGenerator?: (req: NextRequest) => string;
+    skipSuccessfulRequests?: boolean;
 }
 
 const defaultKeyGenerator = (req: NextRequest): string => {
-  return (
-    req.headers.get("x-forwarded-for") ||
-    req.headers.get("x-real-ip") ||
-    "unknown"
-  );
+    return (
+        req.headers.get('x-forwarded-for') ||
+        req.headers.get('x-real-ip') ||
+        'unknown'
+    );
 };
 
 export const rateLimit = (options: RateLimitOptions) => {
-  const {
-    windowMs = config.rateLimit.requests,
-    max = config.rateLimit.requests,
-    keyGenerator = defaultKeyGenerator,
-    skipSuccessfulRequests = false,
-  } = options;
+    const {
+        windowMs = config.rateLimit.window || 900000,
+        max = config.rateLimit.requests || 100,
+        keyGenerator = defaultKeyGenerator,
+        skipSuccessfulRequests = false,
+    } = options;
 
-  return (handler: Function) => {
-    return async (request: NextRequest, context?: any) => {
-      const redis = getRedisCLient();
+    return (
+        handler: (req: NextRequest, context?: any) => Promise<NextResponse>
+    ) => {
+        return async (request: NextRequest, context?: any) => {
+            const redis = getRedisCLient();
+            if (!redis) {
+                throw new ApiError('Rate limiting unavailable', 503);
+            }
 
-      if (!redis) {
-        return handler(request, context);
-      }
+            const key = `rate_limit:${keyGenerator(request)}`;
+            const current = await redis.incr(key);
 
-      const key = `rate_limit:${keyGenerator(request)}`;
-      const current = await redis.incr(key);
+            if (current === 1) {
+                await redis.expire(key, Math.ceil(windowMs / 1000));
+            }
 
-      if (current === 1) {
-        await redis.expire(key, Math.ceil(windowMs / 1000));
-      }
+            if (current > max) {
+                throw new ApiError('Too Many Requests', 429);
+            }
 
-      if (current > max) {
-        throw new ApiError("Too Many Requests", 429);
-      }
+            const response = await handler(request, context);
 
-      const response = await handler(request, context);
+            if (
+                skipSuccessfulRequests &&
+                response.status >= 200 &&
+                response.status < 400
+            ) {
+                await redis.decr(key);
+            }
 
-      if (
-        skipSuccessfulRequests &&
-        response.status >= 200 &&
-        response.status < 400
-      ) {
-        await redis.decr(key);
-      }
+            response.headers.set('X-RateLimit-Limit', max.toString());
+            response.headers.set(
+                'X-RateLimit-Remaining',
+                Math.max(0, max - current).toString()
+            );
+            response.headers.set(
+                'X-RateLimit-Reset',
+                new Date(Date.now() + windowMs).toISOString()
+            );
 
-      const headers = new Headers(response.headers);
-      headers.set("X-RateLimit-Limit", max.toString());
-      headers.set(
-        "X-RateLimit-Remaining",
-        Math.max(0, max - current).toString()
-      );
-      headers.set(
-        "X-RateLimit-Reset",
-        new Date(Date.now() + windowMs).toISOString()
-      );
-
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
+            return response;
+        };
     };
-  };
 };
 
-export const apiKeyRateLimit = (handler: Function) => {
-  return rateLimit({
-    windowMs: 60 * 1000, // 1 min
-    max: 1000, // 1000 requests per minute per API key
-    keyGenerator: (req) => {
-      const apiKey =
-        req.headers.get("x-api-key") ||
-        req.headers.get("authorization")?.replace("Bearer ", "");
-      return `api_key:${apiKey}`;
-    },
-  })(handler);
+export const apiKeyRateLimit = (
+    handler: (req: NextRequest, context?: any) => Promise<NextResponse>
+) => {
+    return async (request: NextRequest, context?: any) => {
+        const apiKey =
+            request.headers.get('x-api-key') ||
+            request.headers.get('authorization')?.replace('Bearer ', '');
+        if (!apiKey) {
+            throw new ApiError('API Key required', 401);
+        }
+
+        const keyRecord = await prisma.apiKey.findFirst({
+            where: {
+                key: apiKey,
+                isActive: true,
+                expiresAt: { gt: new Date() },
+            },
+            select: { rateLimit: true },
+        });
+        if (!keyRecord) {
+            throw new ApiError('Invalid or expired API key', 401);
+        }
+
+        return rateLimit({
+            windowMs: config.rateLimit.window || 900000,
+            max: keyRecord.rateLimit || config.rateLimit.requests || 100,
+            keyGenerator: () => `api_key:${apiKey}`,
+        })(handler)(request, context);
+    };
 };
