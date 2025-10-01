@@ -44,3 +44,7 @@ export const resetPasswordSchema = z.object({
             'Password must contain at least one uppercase, lowercase, and number'
         ),
 });
+
+export const verifyEmailSchema = z.object({
+    token: z.string().min(1, 'Verification token is required'),
+});
