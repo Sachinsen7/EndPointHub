@@ -20,6 +20,24 @@ export const createApiSchema = z.object({
 
 export const updateApiSchema = createApiSchema.partial();
 
+export const apiSearchSchema = z.object({
+    query: z.string().optional(),
+    category: z.string().optional(),
+    limit: z.number().optional().default(10),
+    offset: z.number().optional().default(0),
+    sortBy: z
+        .enum(['name', 'rating', 'totalRequests', 'createdAt'])
+        .optional()
+        .default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
+    tags: z.string().optional(),
+    isPublic: z
+        .string()
+        .transform((val) => val === 'true')
+        .optional()
+        .default(true),
+});
+
 export const subscribeApiSchema = z.object({
     planType: z.enum(['free', 'basic', 'premium']),
     billingPeriod: z.enum(['monthly', 'yearly']).default('monthly'),
