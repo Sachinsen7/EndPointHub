@@ -21,12 +21,12 @@ export const GET = validateQuery(topApisSchema)(async (
     });
 
     return NextResponse.json({
-        apis: apis.apis.map((api) => ({
+        apis: apis.apis.map((api: any) => ({
             id: api.id,
             name: api.name,
             category: api.category,
             requests: api.totalRequests,
-            growth: 0, // Simplified, requires previous period comparison
+            growth: 0,
             rating: api.rating,
         })),
     });
