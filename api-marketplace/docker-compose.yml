@@ -1,0 +1,50 @@
+services:
+    # PostgreSQL Database
+    postgres:
+        image: postgres:15-alpine
+        container_name: endpointhub_postgres
+        environment:
+            POSTGRES_DB: endpointhub
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+        ports:
+            - '5432:5432'
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - ./docker/postgres:/docker-entrypoint-initdb.d
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U postgres']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    # Redis Cache
+    redis:
+        image: redis:7-alpine
+        container_name: endpointhub_redis
+        ports:
+            - '6379:6379'
+        volumes:
+            - redis_data:/data
+        command: redis-server --appendonly yes --requirepass redis_password
+        healthcheck:
+            test: ['CMD', 'redis-cli', '-a', 'redis_password', 'ping']
+            interval: 10s
+            timeout: 3s
+            retries: 3
+
+    # pgAdmin for database management
+    pgadmin:
+        image: dpage/pgadmin4:latest
+        container_name: endpointhub_pgadmin
+        environment:
+            PGADMIN_DEFAULT_EMAIL: admin@endpointhub.com
+            PGADMIN_DEFAULT_PASSWORD: admin
+        ports:
+            - '8080:80'
+        depends_on:
+            - postgres
+
+volumes:
+    postgres_data:
+    redis_data:

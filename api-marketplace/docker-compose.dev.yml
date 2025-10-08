@@ -1,0 +1,33 @@
+
+services:
+  mongodb-dev:
+    image: mongo:7.0
+    container_name: endpointhub_mongodb_dev
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: endpointhub_dev
+    ports:
+      - '27018:27017'
+    volumes:
+      - mongodb_dev_data:/data/db
+
+  redis-dev:
+    image: redis:7-alpine
+    container_name: endpointhub_redis_dev
+    ports:
+      - '6380:6379'
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: endpointhub_mailhog
+    ports:
+      - '1025:1025' # SMTP server
+      - '8025:8025' # Web interface
+
+volumes:
+  mongodb_dev_data:
+  redis_dev_data:
