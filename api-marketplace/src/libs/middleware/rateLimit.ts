@@ -3,12 +3,19 @@ import { getRedisCLient } from '../redis/client';
 import { config } from '../config/env';
 import { ApiError } from '../utils/error';
 import { prisma } from '../db/connections';
+import { hasApiKey } from '../utils/crypto';
+import { ApiKey } from '@/types';
 
 interface RateLimitOptions {
     windowMs: number;
     max: number;
     keyGenerator?: (req: NextRequest) => string;
     skipSuccessfulRequests?: boolean;
+}
+
+// Extend NextRequest to include apiKey
+interface AuthenticatedRequest extends NextRequest {
+    apiKey?: ApiKey;
 }
 
 const defaultKeyGenerator = (req: NextRequest): string => {
@@ -73,9 +80,9 @@ export const rateLimit = (options: RateLimitOptions) => {
 };
 
 export const apiKeyRateLimit = (
-    handler: (req: NextRequest, context?: any) => Promise<NextResponse>
+    handler: (req: AuthenticatedRequest, context?: any) => Promise<NextResponse>
 ) => {
-    return async (request: NextRequest, context?: any) => {
+    return async (request: AuthenticatedRequest, context?: any) => {
         const apiKey =
             request.headers.get('x-api-key') ||
             request.headers.get('authorization')?.replace('Bearer ', '');
@@ -83,14 +90,20 @@ export const apiKeyRateLimit = (
             throw new ApiError('API Key required', 401);
         }
 
+        const keyHash = await hasApiKey(apiKey);
         const keyRecord = await prisma.apiKey.findFirst({
             where: {
-                key: apiKey,
+                keyHash,
                 isActive: true,
                 expiresAt: { gt: new Date() },
             },
-            select: { rateLimit: true },
+            include: {
+                user: {
+                    select: { id: true, email: true, role: true },
+                },
+            },
         });
+
         if (!keyRecord) {
             throw new ApiError('Invalid or expired API key', 401);
         }
@@ -98,7 +111,62 @@ export const apiKeyRateLimit = (
         return rateLimit({
             windowMs: config.rateLimit.window || 900000,
             max: keyRecord.rateLimit || config.rateLimit.requests || 100,
-            keyGenerator: () => `api_key:${apiKey}`,
+            keyGenerator: () => `api_key:${keyHash}`,
         })(handler)(request, context);
+    };
+};
+
+export const authenticateApiKey = (
+    handler: (req: AuthenticatedRequest, context?: any) => Promise<NextResponse>
+) => {
+    return async (request: AuthenticatedRequest, context?: any) => {
+        const apiKey =
+            request.headers.get('x-api-key') ||
+            request.headers.get('authorization')?.replace('Bearer ', '');
+        if (!apiKey) {
+            throw new ApiError('API Key required', 401, [
+                'No API key provided in headers',
+            ]);
+        }
+
+        const keyHash = await hasApiKey(apiKey);
+        const keyRecord = await prisma.apiKey.findFirst({
+            where: {
+                keyHash,
+                isActive: true,
+                expiresAt: { gt: new Date() },
+            },
+            include: {
+                user: {
+                    select: { id: true, email: true, role: true },
+                },
+            },
+        });
+
+        if (!keyRecord) {
+            throw new ApiError('Invalid or expired API key', 401, [
+                'API key not found or inactive',
+            ]);
+        }
+
+        request.apiKey = {
+            id: keyRecord.id,
+            name: keyRecord.name,
+            description: keyRecord.description || undefined,
+            key: apiKey,
+            permissions: keyRecord.permissions,
+            isActive: keyRecord.isActive,
+            lastUsedAt: keyRecord.lastUsedAt?.toISOString(),
+            expiresAt: keyRecord.expiresAt?.toISOString(),
+            createdAt: keyRecord.createdAt.toISOString(),
+            _count: { usage: keyRecord._count?.usage || 0 },
+        };
+
+        await prisma.apiKey.update({
+            where: { id: keyRecord.id },
+            data: { lastUsedAt: new Date() },
+        });
+
+        return handler(request, context);
     };
 };
