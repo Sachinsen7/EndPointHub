@@ -39,7 +39,7 @@ export class APIKeyModel {
                 id: true,
                 name: true,
                 description: true,
-                key: true, // In production, mask this or return separately
+                key: true,
                 permissions: true,
                 isActive: true,
                 lastUsedAt: true,
