@@ -1,27 +1,38 @@
 import { Prisma, ApiCategory, ApiStatus } from '@/generated/prisma';
 import { prisma } from '../connections';
+import { ApiError } from '@/libs/utils/error';
+
+interface ApiSearchParams {
+    query?: string;
+    category?: string;
+    isPublic?: boolean;
+    ownerId?: string;
+    limit?: number;
+    offset?: number;
+    sortBy?: 'name' | 'rating' | 'totalRequests' | 'createdAt';
+    sortOrder?: 'asc' | 'desc';
+    tags?: string[];
+}
 
 export class APIModel {
     static async create(data: Prisma.ApiCreateInput) {
-        return prisma.api.create({
-            data,
-            include: {
-                owner: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                        company: true,
+        try {
+            return await prisma.api.create({
+                data,
+                include: {
+                    owner: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            company: true,
+                        },
                     },
                 },
-                _count: {
-                    select: {
-                        subscriptions: { where: { isActive: true } },
-                        reviews: true,
-                    },
-                },
-            },
-        });
+            });
+        } catch (error) {
+            throw new ApiError('Failed to create API', 500, [error as string]);
+        }
     }
 
     static async findById(id: string) {
@@ -77,16 +88,7 @@ export class APIModel {
         });
     }
 
-    static async search(params: {
-        query?: string;
-        category?: ApiCategory;
-        isPublic?: boolean;
-        ownerId?: string;
-        limit?: number;
-        offset?: number;
-        sortBy?: 'name' | 'rating' | 'totalRequests' | 'createdAt';
-        sortOrder?: 'asc' | 'desc';
-    }) {
+    static async search(params: ApiSearchParams) {
         const {
             query,
             category,
@@ -98,47 +100,56 @@ export class APIModel {
             sortOrder = 'desc',
         } = params;
 
-        const where: Prisma.ApiWhereInput = {
-            isActive: true,
-            ...(isPublic !== undefined && { isPublic }),
-            ...(category && { category }),
-            ...(ownerId && { ownerId }),
-            ...(query && {
-                OR: [
-                    { name: { contains: query, mode: 'insensitive' } },
-                    { description: { contains: query, mode: 'insensitive' } },
-                    { tags: { has: query } },
-                ],
-            }),
-        };
+        try {
+            const where: Prisma.ApiWhereInput = {
+                isActive: true,
+                ...(isPublic !== undefined && { isPublic }),
+                ...(category && { category }),
+                ...(ownerId && { ownerId }),
+                ...(query && {
+                    OR: [
+                        { name: { contains: query, mode: 'insensitive' } },
+                        {
+                            description: {
+                                contains: query,
+                                mode: 'insensitive',
+                            },
+                        },
+                        { tags: { has: query } },
+                    ],
+                }),
+            };
 
-        const [apis, total] = await Promise.all([
-            prisma.api.findMany({
-                where,
-                include: {
-                    owner: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            company: true,
+            const [apis, total] = await Promise.all([
+                prisma.api.findMany({
+                    where,
+                    include: {
+                        owner: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                                company: true,
+                            },
+                        },
+                        _count: {
+                            select: {
+                                subscriptions: { where: { isActive: true } },
+                                reviews: true,
+                            },
                         },
                     },
-                    _count: {
-                        select: {
-                            subscriptions: { where: { isActive: true } },
-                            reviews: true,
-                        },
-                    },
-                },
-                take: limit,
-                skip: offset,
-                orderBy: { [sortBy]: sortOrder },
-            }),
-            prisma.api.count({ where }),
-        ]);
+                    take: limit,
+                    skip: offset,
+                    orderBy: { [sortBy]: sortOrder },
+                }),
+                prisma.api.count({ where }),
+            ]);
 
-        return { apis, total };
+            return { apis, total };
+        } catch (error) {
+            throw new ApiError('Failed to search APIs', 500, [error as string]);
+        }
     }
 
     static async update(id: string, data: Prisma.ApiUpdateInput) {
