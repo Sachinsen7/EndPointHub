@@ -8,6 +8,10 @@ export const hashPassword = async (password: string): Promise<string> => {
     return bcrypt.hash(password, saltRounds);
 };
 
+export const hashToken = async (token: string): Promise<string> => {
+    return crypto.createHash('sha256').update(token).digest('hex');
+};
+
 export const comparePassword = async (
     password: string,
     hash: string
