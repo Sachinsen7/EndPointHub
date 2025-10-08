@@ -1,5 +1,7 @@
+// lib/store/api/baseApi.ts
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { RootState } from '../index';
+import { RootState } from '@/libs/store';
+import * as Sentry from '@sentry/nextjs';
 
 const baseQuery = fetchBaseQuery({
     baseUrl: process.env.NEXT_PUBLIC_API_URL || '/api',
@@ -12,9 +14,10 @@ const baseQuery = fetchBaseQuery({
         }
 
         headers.set('x-api-version', '1.0');
-
-        const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        headers.set('x-request-id', requestId);
+        headers.set(
+            'x-request-id',
+            `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        );
 
         if (typeof window !== 'undefined') {
             headers.set('x-user-agent', navigator.userAgent);
@@ -34,12 +37,14 @@ const baseQueryWithReauth = async (args: any, api: any, extraOptions: any) => {
 
     if (result.error && result.error.status === 401) {
         console.log('Token expired, attempting refresh...');
-
         const refreshResult = await baseQuery(
             {
                 url: '/auth/refresh',
                 method: 'POST',
-                credentials: 'include',
+                body: {
+                    refreshToken: (api.getState() as RootState).auth
+                        .refreshToken,
+                },
             },
             api,
             extraOptions
@@ -47,18 +52,14 @@ const baseQueryWithReauth = async (args: any, api: any, extraOptions: any) => {
 
         if (refreshResult.data) {
             console.log('Token refreshed successfully');
-
             api.dispatch({
                 type: 'auth/setCredentials',
                 payload: refreshResult.data,
             });
-
             result = await baseQuery(args, api, extraOptions);
         } else {
             console.log('Token refresh failed, logging out user');
-
             api.dispatch({ type: 'auth/logout' });
-
             if (typeof window !== 'undefined') {
                 window.location.href = '/login';
             }
@@ -68,29 +69,24 @@ const baseQueryWithReauth = async (args: any, api: any, extraOptions: any) => {
     if (result.error && result.error.status === 429) {
         const retryAfter = result.meta?.response?.headers?.get('retry-after');
         const delay = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
-
         console.log(`Rate limited, retrying after ${delay}ms`);
-
         await new Promise((resolve) => setTimeout(resolve, delay));
         result = await baseQuery(args, api, extraOptions);
     }
 
     if (result.error && result.error.status >= 500) {
         console.log('Server error, retrying...');
-
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        const retryResult = await baseQuery(args, api, extraOptions);
-
-        if (!retryResult.error) {
-            result = retryResult;
-        }
+        result = await baseQuery(args, api, extraOptions);
     }
 
     if (result.error) {
-        console.error('API Error:', {
-            endpoint: args.url || args,
-            error: result.error,
-            timestamp: new Date().toISOString(),
+        Sentry.captureException(new Error('API Error'), {
+            extra: {
+                endpoint: args.url || args,
+                error: result.error,
+                timestamp: new Date().toISOString(),
+            },
         });
     }
 
