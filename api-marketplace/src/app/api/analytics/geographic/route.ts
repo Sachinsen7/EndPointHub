@@ -13,7 +13,6 @@ export const GET = validateQuery(analyticsQuerySchema)(
                 [period === '24h' ? 'hours' : 'days']: period.replace('d', ''),
             });
 
-            // Assume usage model has a `country` field (requires schema update)
             const data = await prisma.usage.groupBy({
                 by: ['country'],
                 where: {
