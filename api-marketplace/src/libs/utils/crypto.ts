@@ -25,11 +25,8 @@ export const generateApiKey = (): string => {
     return prefix + randomBytes;
 };
 
-export const hasApiKey = async (apiKey: string): Promise<boolean> => {
-    const key = await prisma.apiKey.findUnique({
-        where: { key: apiKey },
-    });
-    return !!key;
+export const hasApiKey = async (apiKey: string): Promise<string> => {
+    return crypto.createHash('sha256').update(apiKey).digest('hex');
 };
 
 export const generateAccessToken = (payload: any): string => {
