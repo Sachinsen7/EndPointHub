@@ -5,6 +5,7 @@ import { apiKeySchema } from '@/libs/validations/apiKey';
 import { APIKeyModel } from '@/libs/db/models';
 import { generateApiKey, hasApiKey } from '@/libs/utils/crypto';
 import { ApiError } from '@/libs/utils/error';
+import { Prisma } from '@/generated/prisma';
 
 export const GET = authenticateUser(
     async (request: NextRequest & { user: { id: string } }) => {
@@ -16,19 +17,13 @@ export const GET = authenticateUser(
 export const POST = validateBody(apiKeySchema)(
     authenticateUser(
         async (request: NextRequest & { user: { id: string } }) => {
-            const data = (request as any).validatedData;
+            const data = (request as any).validatedData as Omit<
+                Prisma.ApiKeyCreateInput,
+                'user' | 'key' | 'keyHash'
+            >;
             const user = request.user;
 
-            const key = generateApiKey();
-            const keyHash = await hasApiKey(key);
-
-            const apiKey = await APIKeyModel.create({
-                ...data,
-                key,
-                keyHash,
-                userId: user.id,
-            });
-
+            const apiKey = await APIKeyModel.create(user.id, data);
             return NextResponse.json(
                 { message: 'API key created successfully', apiKey },
                 { status: 201 }
