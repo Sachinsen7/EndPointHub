@@ -237,7 +237,7 @@ export const buildUsageAnalyticsPipeline = (filters: {
 export const withTransaction = async <T>(
     callback: (session: any) => Promise<T>
 ): Promise<T> => {
-    const client = await clientPromise;
+    const client = await clientPromise();
     const session = client.startSession();
 
     try {
