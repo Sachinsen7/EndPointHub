@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-    authenticateApiKey,
     apiKeyRateLimit,
+    authenticateApiKey,
 } from '@/libs/middleware/rateLimit';
 import { prisma } from '@/libs/db/connections';
-import { UsageModel, APIModel, APIKeyModel } from '@/libs/db/models';
+import { UsageModel, APIModel } from '@/libs/db/models';
 import { ApiError } from '@/libs/utils/error';
 import axios, { AxiosHeaders } from 'axios';
 import { ApiKey } from '@/types';
+import { HttpMethod } from '@/generated/prisma';
 
 interface AuthenticatedRequest extends NextRequest {
     apiKey?: ApiKey;
@@ -17,7 +18,7 @@ const convertAxiosHeaders = (
     axiosHeaders: AxiosHeaders
 ): Record<string, string> => {
     const headers: Record<string, string> = {};
-    axiosHeaders.forEach((value, key) => {
+    axiosHeaders.forEach((value: string | string[], key: string) => {
         if (value !== undefined && value !== null) {
             headers[key] = String(value);
         }
@@ -33,13 +34,12 @@ export const GET = apiKeyRateLimit(
         ) => {
             const { apiId, path } = params;
             const apiKey = request.apiKey;
-            if (!apiKey) {
+            if (!apiKey || !apiKey.user) {
                 throw new ApiError('API key not attached', 500, [
                     'Middleware error: apiKey missing',
                 ]);
             }
 
-            // Validate API exists and is active
             const api = await APIModel.findById(apiId);
             if (!api || !api.isActive) {
                 throw new ApiError('API not found or inactive', 404, [
@@ -47,26 +47,24 @@ export const GET = apiKeyRateLimit(
                 ]);
             }
 
-            // Verify user has an active subscription
             const subscription = await prisma.subscription.findFirst({
                 where: {
                     apiId,
-                    userId: apiKey.user?.id,
+                    userId: apiKey.user.id,
                     isActive: true,
                 },
             });
             if (!subscription) {
                 throw new ApiError('No active subscription for this API', 403, [
-                    'User ID: ' + apiKey.user?.id,
+                    'User ID: ' + apiKey.user.id,
                     'API ID: ' + apiId,
                 ]);
             }
 
-            // Check monthly limit
             const usageCount = await prisma.usage.count({
                 where: {
                     apiId,
-                    userId: apiKey.user?.id,
+                    userId: apiKey.user.id,
                     timestamp: {
                         gte: new Date(
                             new Date().getFullYear(),
@@ -83,11 +81,9 @@ export const GET = apiKeyRateLimit(
                 ]);
             }
 
-            // Construct target URL
             const targetUrl = `${api.baseUrl}/${path.join('/')}${request.nextUrl.search || ''}`;
+            const startTime = Date.now();
 
-            // Forward request
-            const startTime = Date.now(); // Moved outside try block
             try {
                 const response = await axios({
                     method: request.method as
@@ -95,7 +91,7 @@ export const GET = apiKeyRateLimit(
                         | 'POST'
                         | 'PUT'
                         | 'DELETE'
-                        | 'PATCH', // Type assertion for HttpMethod
+                        | 'PATCH',
                     url: targetUrl,
                     headers: {
                         ...Object.fromEntries(request.headers),
@@ -106,12 +102,11 @@ export const GET = apiKeyRateLimit(
                     timeout: 30000,
                 });
 
-                // Log usage
                 await UsageModel.create({
-                    apiId,
-                    userId: apiKey.user?.id,
-                    keyId: apiKey.id,
-                    method: request.method, // Prisma schema likely accepts string
+                    api: { connect: { id: apiId } },
+                    user: { connect: { id: apiKey.user.id } },
+                    apiKey: { connect: { id: apiKey.id } },
+                    method: request.method as HttpMethod,
                     path: `/${path.join('/')}`,
                     statusCode: response.status,
                     responseTime: Date.now() - startTime,
@@ -119,10 +114,8 @@ export const GET = apiKeyRateLimit(
                     country: request.headers.get('x-geo-country') || 'unknown',
                 });
 
-                // Increment API request count
                 await APIModel.incrementRequests(apiId);
 
-                // Convert axios headers to HeadersInit
                 const responseHeaders = convertAxiosHeaders(
                     response.headers as AxiosHeaders
                 );
@@ -138,17 +131,19 @@ export const GET = apiKeyRateLimit(
                     headers: responseHeaders,
                 });
             } catch (error: any) {
-                // Log failed request
-                await UsageModel.create({
-                    apiId,
-                    userId: apiKey.user?.id,
-                    keyId: apiKey.id,
-                    method: request.method,
-                    path: `/${path.join('/')}`,
-                    statusCode: error.response?.status || 500,
-                    responseTime: Date.now() - startTime,
-                    timestamp: new Date(),
-                    country: request.headers.get('x-geo-country') || 'unknown',
+                await prisma.usage.create({
+                    data: {
+                        api: { connect: { id: apiId } },
+                        user: { connect: { id: apiKey.user.id } },
+                        key: { connect: { id: apiKey.id } },
+                        method: request.method as HttpMethod,
+                        path: `/${path.join('/')}`,
+                        statusCode: error.response?.status || 500,
+                        responseTime: Date.now() - startTime,
+                        timestamp: new Date(),
+                        country:
+                            request.headers.get('x-geo-country') || 'unknown',
+                    },
                 });
 
                 throw new ApiError(
