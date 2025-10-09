@@ -10,12 +10,15 @@ export const POST = authenticateUser(
     ) => {
         const user = request.user;
 
-        const subscription = await SubscriptionsModel.findById(params.id);
+        const subscription = await SubscriptionsModel.findByUserAndApi(
+            user.id,
+            params.id
+        );
         if (!subscription || subscription.userId !== user.id) {
             throw new ApiError('Subscription not found or unauthorized', 403);
         }
 
-        await SubscriptionsModel.cancel(params.id);
+        await SubscriptionsModel.cancel(user.id, params.id);
         return NextResponse.json({
             message: 'Subscription canceled successfully',
         });
