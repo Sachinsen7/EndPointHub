@@ -14,15 +14,12 @@ export const PUT = validateBody(apiKeyUpdateSchema)(
             const data = (request as any).validatedData;
             const user = request.user;
 
-            const key = await APIKeyModel.findByUserId(params.id);
+            const key = await APIKeyModel.findById(params.id);
             if (!key || key.userId !== user.id) {
                 throw new ApiError('API key not found or unauthorized', 403);
             }
 
-            const updatedKey = await APIKeyModel.updateLastUsed(
-                params.id,
-                data
-            );
+            const updatedKey = await APIKeyModel.update(params.id, data);
             return NextResponse.json({
                 message: 'API key updated successfully',
                 apiKey: updatedKey,
@@ -38,7 +35,7 @@ export const DELETE = authenticateUser(
     ) => {
         const user = request.user;
 
-        const key = await APIKeyModel.findByUserId(params.id);
+        const key = await APIKeyModel.findById(params.id);
         if (!key || key.userId !== user.id) {
             throw new ApiError('API key not found or unauthorized', 403);
         }
