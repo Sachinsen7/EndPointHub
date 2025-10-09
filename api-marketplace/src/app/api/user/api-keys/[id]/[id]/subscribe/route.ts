@@ -4,6 +4,7 @@ import { authenticateUser } from '@/libs/middleware/auth';
 import { subscriptionSchema } from '@/libs/validations/subscription';
 import { SubscriptionsModel, APIModel } from '@/libs/db/models';
 import { ApiError } from '@/libs/utils/error';
+import { Prisma } from '@/generated/prisma';
 
 export const POST = validateBody(subscriptionSchema)(
     authenticateUser(
@@ -11,12 +12,13 @@ export const POST = validateBody(subscriptionSchema)(
             request: NextRequest & { user: { id: string } },
             { params }: { params: { id: string } }
         ) => {
-            const data = (request as any).validatedData;
+            const data = (request as any)
+                .validatedData as Prisma.SubscriptionCreateInput;
             const user = request.user;
 
             const api = await APIModel.findById(params.id);
-            if (!api) {
-                throw new ApiError('API not found', 404);
+            if (!api || !api.isActive) {
+                throw new ApiError('API not found or inactive', 404);
             }
 
             const existingSubscription =
@@ -25,12 +27,14 @@ export const POST = validateBody(subscriptionSchema)(
                 throw new ApiError('Already subscribed to this API', 400);
             }
 
+            const subscriptionModel = new SubscriptionsModel();
             const subscription = await SubscriptionsModel.create({
                 ...data,
-                userId: user.id,
-                apiId: params.id,
+                user: { connect: { id: user.id } },
+                api: { connect: { id: params.id } },
                 startDate: new Date(),
                 monthlyLimit: api.pricing.monthlyLimit,
+                isActive: true,
             });
 
             return NextResponse.json(
@@ -39,4 +43,24 @@ export const POST = validateBody(subscriptionSchema)(
             );
         }
     )
+);
+
+export const DELETE = authenticateUser(
+    async (
+        request: NextRequest & { user: { id: string } },
+        { params }: { params: { id: string } }
+    ) => {
+        const user = request.user;
+
+        const subscription = await SubscriptionsModel.findByUserAndApi(
+            user.id,
+            params.id
+        );
+        if (!subscription || subscription.userId !== user.id) {
+            throw new ApiError('Subscription not found or unauthorized', 404);
+        }
+
+        await SubscriptionsModel.cancel(user.id, params.id);
+        return NextResponse.json({ message: 'Unsubscribed successfully' });
+    }
 );
