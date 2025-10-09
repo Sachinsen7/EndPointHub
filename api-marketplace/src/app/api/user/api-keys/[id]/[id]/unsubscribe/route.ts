@@ -18,7 +18,7 @@ export const DELETE = authenticateUser(
             throw new ApiError('Subscription not found', 404);
         }
 
-        await SubscriptionsModel.cancel(subscription.id);
+        await SubscriptionsModel.cancel(subscription.id, user.id);
         return NextResponse.json({ message: 'Unsubscribed successfully' });
     }
 );
