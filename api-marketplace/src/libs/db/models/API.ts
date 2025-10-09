@@ -104,7 +104,7 @@ export class APIModel {
             const where: Prisma.ApiWhereInput = {
                 isActive: true,
                 ...(isPublic !== undefined && { isPublic }),
-                ...(category && { category }),
+                ...(category && { category: category as ApiCategory }),
                 ...(ownerId && { ownerId }),
                 ...(query && {
                     OR: [
