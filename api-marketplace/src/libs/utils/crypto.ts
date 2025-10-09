@@ -2,10 +2,17 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import { config } from '../config/env';
+import { scryptSync, randomBytes } from 'crypto';
 
-export const hashPassword = async (password: string): Promise<string> => {
-    const saltRounds = 25;
-    return bcrypt.hash(password, saltRounds);
+export const hashPassword = async (password: string) => {
+    const salt = randomBytes(16).toString('hex');
+    const hashedPassword = scryptSync(password, salt, 64).toString('hex');
+    return `${salt}:${hashedPassword}`;
+};
+export const verifyPassword = async (password: string, hash: string) => {
+    const [salt, storedHash] = hash.split(':');
+    const hashedPassword = scryptSync(password, salt, 64).toString('hex');
+    return hashedPassword === storedHash;
 };
 
 export const hashToken = async (token: string): Promise<string> => {
