@@ -8,15 +8,9 @@ export class APIKeyModel {
         data: Omit<Prisma.ApiKeyCreateInput, 'user' | 'key' | 'keyHash'>
     ) {
         const key = generateApiKey();
-        const keyHash = hasApiKey(key);
-
-        const apiKey = await prisma.apiKey.create({
-            data: {
-                ...data,
-                key,
-                keyHash,
-                user: { connect: { id: userId } },
-            },
+        const keyHash = await hasApiKey(key);
+        return prisma.apiKey.create({
+            data: { ...data, key, keyHash, user: { connect: { id: userId } } },
             select: {
                 id: true,
                 name: true,
@@ -29,7 +23,26 @@ export class APIKeyModel {
                 createdAt: true,
             },
         });
-        return apiKey;
+    }
+
+    static async findById(id: string) {
+        return prisma.apiKey.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                userId: true,
+                name: true,
+                description: true,
+                key: true,
+                keyHash: true,
+                permissions: true,
+                isActive: true,
+                lastUsedAt: true,
+                expiresAt: true,
+                rateLimit: true,
+                createdAt: true,
+            },
+        });
     }
 
     static async findByUserId(userId: string) {
@@ -64,6 +77,24 @@ export class APIKeyModel {
         });
     }
 
+    static async update(id: string, data: Prisma.ApiKeyUpdateInput) {
+        return prisma.apiKey.update({
+            where: { id },
+            data,
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                key: true,
+                permissions: true,
+                isActive: true,
+                expiresAt: true,
+                rateLimit: true,
+                createdAt: true,
+            },
+        });
+    }
+
     static async updateLastUsed(id: string) {
         return prisma.apiKey.update({
             where: { id },
@@ -78,12 +109,17 @@ export class APIKeyModel {
         });
     }
 
+    static async delete(id: string) {
+        return prisma.apiKey.delete({
+            where: { id },
+        });
+    }
+
     static async validatePermission(apiKeyId: string, permission: string) {
         const apiKey = await prisma.apiKey.findUnique({
             where: { id: apiKeyId },
             select: { permissions: true },
         });
-
         return apiKey?.permissions.includes(permission) || false;
     }
 }
