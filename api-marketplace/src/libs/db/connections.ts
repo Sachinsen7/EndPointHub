@@ -1,5 +1,6 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { Prisma } from '@/generated/prisma';
 
 declare global {
     var prisma: PrismaClient | undefined;
@@ -31,23 +32,22 @@ export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== 'production') {
     globalForPrisma.prisma = prisma;
 }
-
-prisma.$on('query', (e) => {
+prisma.$on('query', (e: Prisma.QueryEvent) => {
     if (process.env.NODE_ENV === 'development') {
         logger.debug(`Query: ${e.query}`);
         logger.debug(`Duration: ${e.duration}ms`);
     }
 });
 
-prisma.$on('error', (e) => {
+prisma.$on('error', (e: Prisma.LogEvent) => {
     logger.error('Prisma error:', e);
 });
 
-prisma.$on('warn', (e) => {
+prisma.$on('warn', (e: Prisma.LogEvent) => {
     logger.warn('Prisma warning:', e);
 });
 
-prisma.$on('info', (e) => {
+prisma.$on('info', (e: Prisma.LogEvent) => {
     logger.info('Prisma info:', e);
 });
 
