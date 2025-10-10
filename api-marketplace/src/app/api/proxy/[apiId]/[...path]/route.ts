@@ -30,9 +30,9 @@ export const GET = apiKeyRateLimit(
     authenticateApiKey(
         async (
             request: AuthenticatedRequest,
-            { params }: { params: { apiId: string; path: string[] } }
+            { params }: { params: Promise<{ apiId: string; path: string[] }> }
         ) => {
-            const { apiId, path } = params;
+            const { apiId, path } = await params;
             const apiKey = request.apiKey;
             if (!apiKey || !apiKey.user) {
                 throw new ApiError('API key not attached', 500, [
