@@ -4,10 +4,11 @@ import { ApiError } from '@/libs/utils/error';
 
 export const GET = async (
     request: NextRequest,
-    { params }: { params: { slug: string } }
+    { params }: { params: Promise<{ slug: string }> }
 ) => {
+    const { slug } = await params;
     const api = await prisma.api.findUnique({
-        where: { slug: params.slug, isActive: true },
+        where: { slug, isActive: true },
         include: {
             owner: {
                 select: {
