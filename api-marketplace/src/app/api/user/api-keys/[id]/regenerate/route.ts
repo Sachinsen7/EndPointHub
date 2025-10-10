@@ -7,11 +7,12 @@ import { ApiError } from '@/libs/utils/error';
 export const POST = authenticateUser(
     async (
         request: NextRequest & { user: { id: string } },
-        { params }: { params: { id: string } }
+        { params }: { params: Promise<{ id: string }> }
     ) => {
         const user = request.user;
+        const { id } = await params;
 
-        const key = await APIKeyModel.findById(params.id);
+        const key = await APIKeyModel.findById(id);
         if (!key || key.userId !== user.id) {
             throw new ApiError('API key not found or unauthorized', 403);
         }
@@ -19,7 +20,7 @@ export const POST = authenticateUser(
         const newKey = generateApiKey();
         const keyHash = await hasApiKey(newKey);
 
-        const updatedKey = await APIKeyModel.update(params.id, {
+        const updatedKey = await APIKeyModel.update(id, {
             key: newKey,
             keyHash,
         });
