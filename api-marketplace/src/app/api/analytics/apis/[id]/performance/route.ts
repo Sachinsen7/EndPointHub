@@ -10,9 +10,10 @@ export const GET = validateQuery(performanceSchema)(
     authenticateUser(
         async (
             request: NextRequest & { user: { id: string } },
-            { params }: { params: { id: string } }
+            { params }: { params: Promise<{ id: string }> }
         ) => {
             const { period, metrics } = (request as any).validatedQuery;
+            const { id } = await params;
             const start = sub(new Date(), {
                 [period === '24h' ? 'hours' : 'days']: period.replace('d', ''),
             });
@@ -21,7 +22,7 @@ export const GET = validateQuery(performanceSchema)(
                 by: ['apiId'],
                 where: {
                     userId: request.user.id,
-                    apiId: params.id,
+                    apiId: id,
                     timestamp: { gte: start },
                 },
                 _count: { _all: true },
@@ -30,14 +31,14 @@ export const GET = validateQuery(performanceSchema)(
             });
 
             const api = await prisma.api.findUnique({
-                where: { id: params.id },
+                where: { id },
             });
             if (!api) {
                 throw new ApiError('API not found', 404);
             }
 
             return NextResponse.json({
-                apiId: params.id,
+                apiId: id,
                 apiName: api.name,
                 requests: data[0]?._count._all || 0,
                 avgResponseTime: data[0]?._avg.responseTime || 0,
