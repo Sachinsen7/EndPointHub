@@ -6,9 +6,9 @@ import { ApiError } from '@/libs/utils/error';
 
 export const POST = validateBody(verifyEmailSchema)(async (
     request: NextRequest,
-    { params }: { params: { token: string } }
+    { params }: { params: Promise<{ token: string }> }
 ) => {
-    const { token } = params;
+    const { token } = await params;
 
     const user = await UserModel.verifyEmail(token);
     if (!user) {
