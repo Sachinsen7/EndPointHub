@@ -1,21 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateBody } from '@/libs/middleware/validation';
-import { resetPasswordSchema } from '@/libs/validations/auth';
-import { UserModel } from '@/libs/db/models';
-import { hashPassword } from '@/libs/utils/crypto';
+import { prisma } from '@/libs/db/connections';
 import { ApiError } from '@/libs/utils/error';
+import { hashPassword } from '@/libs/utils/crypto';
+import { logger } from '@/libs/utils/logger';
+import { z } from 'zod';
 
-export const POST = validateBody(resetPasswordSchema)(async (
-    request: NextRequest,
-    { params }: { params: { token: string } }
-) => {
-    const { password } = (request as any).validatedData;
-    const { token } = params;
-
-    const updatedUser = await UserModel.resetPassword(token, password);
-    if (!updatedUser) {
-        throw new ApiError('Invalid or expired reset token', 400);
-    }
-
-    return NextResponse.json({ message: 'Password reset successfully' });
+const resetPasswordSchema = z.object({
+    password: z.string().min(8),
 });
+
+export const POST = async (
+    request: NextRequest,
+    { params }: { params: Promise<{ token: string }> }
+) => {
+    try {
+        const { password } = resetPasswordSchema.parse(await request.json());
+        const { token } = await params;
+
+        const resetToken = await prisma.passwordResetToken.findUnique({
+            where: { token },
+            include: { user: true },
+        });
+        if (
+            !resetToken ||
+            !resetToken.user ||
+            resetToken.expiresAt < new Date()
+        ) {
+            throw new ApiError('Invalid or expired reset token', 400);
+        }
+
+        const hashedPassword = await hashPassword(password);
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: resetToken.userId },
+                data: { password: hashedPassword },
+            }),
+            prisma.passwordResetToken.delete({
+                where: { token },
+            }),
+        ]);
+
+        return NextResponse.json(
+            { message: 'Password reset successfully' },
+            { status: 200 }
+        );
+    } catch (error: any) {
+        logger.error('Reset password error', {
+            error: error.message,
+            token,
+        });
+        throw error instanceof ApiError || error instanceof z.ZodError
+            ? error
+            : new ApiError('Failed to reset password', 500, [
+                  error.message || 'Unknown error',
+              ]);
+    }
+};
