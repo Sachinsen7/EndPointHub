@@ -10,9 +10,10 @@ export const GET = validateQuery(analyticsQuerySchema)(
     authenticateUser(
         async (
             request: NextRequest & { user: { id: string } },
-            { params }: { params: { apiId: string } }
+            { params }: { params: Promise<{ apiId: string }> }
         ) => {
             const { period, groupBy } = (request as any).validatedQuery;
+            const { apiId } = await params;
             const start = sub(new Date(), {
                 [period === '24h' ? 'hours' : 'days']: period.replace('d', ''),
             });
@@ -21,7 +22,7 @@ export const GET = validateQuery(analyticsQuerySchema)(
                 by: [groupBy || 'day', 'apiId'],
                 where: {
                     userId: request.user.id,
-                    apiId: params.apiId,
+                    apiId,
                     timestamp: { gte: start },
                 },
                 _count: { _all: true },
