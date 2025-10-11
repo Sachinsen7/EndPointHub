@@ -1,24 +1,56 @@
+version: '3.8'
+
 services:
-    # PostgreSQL Database
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: endpointhub_app
+        ports:
+            - '3000:3000'
+        environment:
+            - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/endpointhub
+            - REDIS_URL=redis://:redis_password@redis:6379
+            - JWT_SECRET=${JWT_SECRET}
+            - JWT_EXPIRES_IN=7d
+            - JWT_REFRESH_EXPIRES_IN=30d
+            - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+            - NEXTAUTH_URL=http://localhost:3000
+            - EMAIL_HOST=mailhog
+            - EMAIL_PORT=1025
+            - EMAIL_USER=
+            - EMAIL_PASS=
+            - NODE_ENV=${NODE_ENV}
+            - NEXT_PUBLIC_APP_URL=http://localhost:3000
+            - NEXT_PUBLIC_API_URL=http://localhost:3000/api
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            mailhog:
+                condition: service_started
+        volumes:
+            - .:/app
+        command: npm run start
+
     postgres:
         image: postgres:15-alpine
         container_name: endpointhub_postgres
         environment:
-            POSTGRES_DB: endpointhub
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: postgres
+            - POSTGRES_DB=endpointhub
+            - POSTGRES_USER=postgres
+            - POSTGRES_PASSWORD=postgres
         ports:
             - '5432:5432'
         volumes:
             - postgres_data:/var/lib/postgresql/data
-            - ./docker/postgres:/docker-entrypoint-initdb.d
         healthcheck:
             test: ['CMD-SHELL', 'pg_isready -U postgres']
             interval: 10s
             timeout: 5s
             retries: 5
 
-    # Redis Cache
     redis:
         image: redis:7-alpine
         container_name: endpointhub_redis
@@ -33,17 +65,12 @@ services:
             timeout: 3s
             retries: 3
 
-    # pgAdmin for database management
-    pgadmin:
-        image: dpage/pgadmin4:latest
-        container_name: endpointhub_pgadmin
-        environment:
-            PGADMIN_DEFAULT_EMAIL: admin@endpointhub.com
-            PGADMIN_DEFAULT_PASSWORD: admin
+    mailhog:
+        image: mailhog/mailhog:latest
+        container_name: endpointhub_mailhog
         ports:
-            - '8080:80'
-        depends_on:
-            - postgres
+            - '1025:1025'
+            - '8025:8025'
 
 volumes:
     postgres_data:
