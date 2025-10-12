@@ -31,7 +31,7 @@ export const GET = validateQuery(analyticsQuerySchema)(
                 timestamp: { gte: start, lte: end },
             };
 
-            const [summary, chartData] = await Promise.all([
+            const [summary, chartData, apiNames] = await Promise.all([
                 prisma.usage.aggregate({
                     where,
                     _sum: { responseTime: true, statusCode: true },
@@ -44,6 +44,16 @@ export const GET = validateQuery(analyticsQuerySchema)(
                     _avg: { responseTime: true },
                     _sum: { statusCode: true },
                 }),
+                prisma.api.findMany({
+                    where: {
+                        id: {
+                            in: apiId ? [apiId] : undefined,
+                        },
+                    },
+                    select: { id: true, name: true },
+                }).then((apis) => 
+                    Object.fromEntries(apis.map(api => [api.id, api.name]))
+                ),
             ]);
 
             const totalRequests = summary._count._all;
@@ -66,10 +76,7 @@ export const GET = validateQuery(analyticsQuerySchema)(
                 chartData: chartData.map((item: any) => ({
                     timestamp: item[groupBy || 'day'],
                     apiId: item.apiId,
-                    apiName:
-                        prisma.api.findUnique({
-                            where: { id: item.apiId },
-                        })?.name || 'Unknown',
+                    apiName: apiNames[item.apiId] || 'Unknown',
                     requests: item._count._all,
                     errors: item._sum.statusCode
                         ? item._sum.statusCode >= 400
