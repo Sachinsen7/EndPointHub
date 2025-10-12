@@ -34,7 +34,7 @@ export const POST = validateBody(subscriptionSchema)(
                 user: { connect: { id: user.id } },
                 api: { connect: { id } },
                 startDate: new Date(),
-                monthlyLimit: api.pricing.monthlyLimit,
+                monthlyLimit: (api.pricing as any)?.monthlyLimit || 1000,
                 isActive: true,
             });
 
