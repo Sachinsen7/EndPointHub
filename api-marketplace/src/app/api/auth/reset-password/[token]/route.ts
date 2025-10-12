@@ -13,32 +13,31 @@ export const POST = async (
     request: NextRequest,
     { params }: { params: Promise<{ token: string }> }
 ) => {
+    let token: string | undefined;
     try {
         const { password } = resetPasswordSchema.parse(await request.json());
-        const { token } = await params;
+        const resolvedParams = await params;
+        token = resolvedParams.token;
 
-        const resetToken = await prisma.passwordResetToken.findUnique({
-            where: { token },
-            include: { user: true },
+        const user = await prisma.user.findFirst({
+            where: { 
+                resetToken: token,
+                resetTokenExpiry: { gt: new Date() }
+            },
         });
-        if (
-            !resetToken ||
-            !resetToken.user ||
-            resetToken.expiresAt < new Date()
-        ) {
+        if (!user) {
             throw new ApiError('Invalid or expired reset token', 400);
         }
 
         const hashedPassword = await hashPassword(password);
-        await prisma.$transaction([
-            prisma.user.update({
-                where: { id: resetToken.userId },
-                data: { password: hashedPassword },
-            }),
-            prisma.passwordResetToken.delete({
-                where: { token },
-            }),
-        ]);
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { 
+                password: hashedPassword,
+                resetToken: null,
+                resetTokenExpiry: null
+            },
+        });
 
         return NextResponse.json(
             { message: 'Password reset successfully' },
