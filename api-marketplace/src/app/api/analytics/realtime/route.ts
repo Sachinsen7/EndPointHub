@@ -42,7 +42,7 @@ export const GET = authenticateUser(
             const [hourlyStats, recentRequests, activeApis, apiMap] =
                 await Promise.all([
                     prisma.usage.groupBy({
-                        by: ['apiId', 'timestamp'],
+                        by: ['apiId', 'timestamp'] as const,
                         where: {
                             userId: request.user.id,
                             timestamp: { gte: start },
@@ -50,7 +50,7 @@ export const GET = authenticateUser(
                         _count: { _all: true },
                         _avg: { responseTime: true },
                         _sum: { statusCode: true },
-                    }) as Promise<UsageGroupBy[]>,
+                    }),
                     prisma.usage.findMany({
                         where: {
                             userId: request.user.id,
@@ -58,7 +58,7 @@ export const GET = authenticateUser(
                         },
                         orderBy: { timestamp: 'desc' },
                         take: 50,
-                    }) as Promise<UsageRecord[]>,
+                    }),
                     prisma.api.findMany({
                         where: {
                             isActive: true,
@@ -79,7 +79,7 @@ export const GET = authenticateUser(
                                 },
                             },
                         },
-                    }) as Promise<ActiveApi[]>,
+                    }),
                     prisma.api
                         .findMany({
                             where: {
@@ -102,7 +102,7 @@ export const GET = authenticateUser(
                             Object.fromEntries(
                                 apis.map((api) => [api.id, api.name])
                             )
-                        ) as Promise<Record<string, string>>,
+                        ),
                 ]);
 
             const errorCounts = await prisma.usage.groupBy({
@@ -167,12 +167,12 @@ export const GET = authenticateUser(
                 activeApis: activeApis.map((api) => ({
                     id: api.id,
                     name: api.name,
-                    category: api.category,
-                    requests: api.totalRequests,
+                    category: api.category as string,
+                    requests: Number(api.totalRequests),
                     errors: errorMap[api.id] ?? 0,
                     errorRate:
-                        api.totalRequests > 0
-                            ? (errorMap[api.id] ?? 0) / api.totalRequests
+                        Number(api.totalRequests) > 0
+                            ? (errorMap[api.id] ?? 0) / Number(api.totalRequests)
                             : 0,
                     avgResponseTime: responseTimeMap[api.id] ?? 0,
                 })),
