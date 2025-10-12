@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useAppSelector, useAppDispatch } from '@/libs/store/hooks';
 import {
     addNotification,
@@ -75,7 +75,7 @@ export const useNotifications = (): UseNotificationsReturn => {
 
             try {
                 const audioContext = new (window.AudioContext ||
-                    (window as any).webkitAudioContext)();
+                    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
                 const oscillator = audioContext.createOscillator();
                 const gainNode = audioContext.createGain();
 
@@ -110,8 +110,8 @@ export const useNotifications = (): UseNotificationsReturn => {
         [settings.sound]
     );
 
-    const notify = useCallback(
-        {
+    const notify = useMemo(
+        () => ({
             success: (
                 title: string,
                 message?: string,
@@ -130,7 +130,7 @@ export const useNotifications = (): UseNotificationsReturn => {
                 dispatch(addNotification(notification));
                 playNotificationSound('success');
 
-                return notification.id || '';
+                return `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             },
 
             error: (
@@ -150,7 +150,7 @@ export const useNotifications = (): UseNotificationsReturn => {
                 dispatch(addNotification(notification));
                 playNotificationSound('error');
 
-                return notification.id || '';
+                return `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             },
 
             warning: (
@@ -169,7 +169,7 @@ export const useNotifications = (): UseNotificationsReturn => {
                 dispatch(addNotification(notification));
                 playNotificationSound('warning');
 
-                return notification.id || '';
+                return `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             },
 
             info: (
@@ -190,9 +190,9 @@ export const useNotifications = (): UseNotificationsReturn => {
                 dispatch(addNotification(notification));
                 playNotificationSound('info');
 
-                return notification.id || '';
+                return `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             },
-        },
+        }),
         [dispatch, settings, playNotificationSound]
     );
 
