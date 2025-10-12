@@ -7,6 +7,7 @@ export class RefreshTokenModel {
         const tokenHash = await hashToken(token);
         return prisma.refreshToken.create({
             data: {
+                token,
                 tokenHash,
                 userId,
                 expiresAt,
@@ -17,7 +18,7 @@ export class RefreshTokenModel {
     static async findByToken(token: string) {
         return prisma.refreshToken.findFirst({
             where: {
-                tokenHash: await hashToken(token),
+                token,
                 isRevoked: false,
                 expiresAt: { gt: new Date() },
             },
@@ -27,7 +28,7 @@ export class RefreshTokenModel {
 
     static async revoke(token: string) {
         return prisma.refreshToken.update({
-            where: { tokenHash: await hashToken(token) },
+            where: { token },
             data: { isRevoked: true },
         });
     }
