@@ -8,7 +8,7 @@ import {
 } from '@/libs/store/api/authApi';
 import {
     setCredentials,
-    logout,
+    logout as logoutAction,
     updateActivity,
     sessionTimeout,
     selectCurrentUser,
@@ -32,7 +32,7 @@ interface AuthState {
 export const useAuth = (): AuthState => {
     const dispatch = useAppDispatch();
     const router = useRouter();
-    const sessionCheckRef = useRef<NodeJS.Timeout>();
+    const sessionCheckRef = useRef<NodeJS.Timeout | null>(null);
 
     const user = useAppSelector(selectCurrentUser);
     const isAuthenticated = useAppSelector(selectIsAuthenticated);
@@ -64,7 +64,7 @@ export const useAuth = (): AuthState => {
 
     useEffect(() => {
         if (error && isAuthenticated) {
-            dispatch(logout());
+            dispatch(logoutAction());
             dispatch(
                 addNotification({
                     type: 'error',
@@ -82,23 +82,18 @@ export const useAuth = (): AuthState => {
         const attemptRefresh = async () => {
             try {
                 const refreshToken = localStorage.getItem('refreshToken')!;
-                const response = await refreshTokenMutation({
-                    refreshToken,
-                }).unwrap();
+                const response = await refreshTokenMutation().unwrap();
                 dispatch(
                     setCredentials({
                         user: response.user,
                         accessToken: response.accessToken,
-                        refreshToken: response.refreshToken || refreshToken,
+                        refreshToken: refreshToken,
                     })
                 );
                 localStorage.setItem('accessToken', response.accessToken);
-                localStorage.setItem(
-                    'refreshToken',
-                    response.refreshToken || refreshToken
-                );
+                // Keep the existing refresh token since the response doesn't include a new one
             } catch (err) {
-                dispatch(logout());
+                dispatch(logoutAction());
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
                 router.push('/login');
@@ -211,7 +206,7 @@ export const useAuth = (): AuthState => {
         } catch (error) {
             console.warn('Logout request failed:', error);
         } finally {
-            dispatch(logout());
+            dispatch(logoutAction());
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             dispatch(
