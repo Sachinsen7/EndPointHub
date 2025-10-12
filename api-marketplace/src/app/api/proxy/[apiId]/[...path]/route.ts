@@ -135,7 +135,7 @@ export const GET = apiKeyRateLimit(
                     data: {
                         api: { connect: { id: apiId } },
                         user: { connect: { id: apiKey.user.id } },
-                        key: { connect: { id: apiKey.id } },
+                        apiKey: { connect: { id: apiKey.id } },
                         method: request.method as HttpMethod,
                         path: `/${path.join('/')}`,
                         statusCode: error.response?.status || 500,
