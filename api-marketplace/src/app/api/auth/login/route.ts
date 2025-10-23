@@ -36,11 +36,11 @@ export const POST = validateBody(loginSchema)(async (request: NextRequest) => {
         refreshToken,
         new Date(
             Date.now() +
-                Number(config.jwt.refreshExpiresIn!.replace('d', '')) *
-                    24 *
-                    60 *
-                    60 *
-                    1000
+            Number(config.jwt.refreshExpiresIn!.replace('d', '')) *
+            24 *
+            60 *
+            60 *
+            1000
         )
     );
 
