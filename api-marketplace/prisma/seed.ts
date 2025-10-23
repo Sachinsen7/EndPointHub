@@ -47,12 +47,12 @@ async function main() {
             baseUrl: 'https://api.openweathermap.org/data/2.5',
             category: 'WEATHER',
             slug: 'weather-api',
-            tags: ['weather', 'forecast', 'climate'],
-            pricing: {
+            tags: JSON.stringify(['weather', 'forecast', 'climate']),
+            pricing: JSON.stringify({
                 free: true,
                 pricePerRequest: 0,
                 monthlyLimit: 1000,
-            },
+            }),
             ownerId: admin.id,
         },
     });
@@ -67,12 +67,12 @@ async function main() {
             baseUrl: 'https://newsapi.org/v2',
             category: 'NEWS',
             slug: 'news-api',
-            tags: ['news', 'articles', 'journalism'],
-            pricing: {
+            tags: JSON.stringify(['news', 'articles', 'journalism']),
+            pricing: JSON.stringify({
                 free: true,
                 pricePerRequest: 0,
                 monthlyLimit: 500,
-            },
+            }),
             ownerId: admin.id,
         },
     });
