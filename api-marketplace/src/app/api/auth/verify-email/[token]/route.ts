@@ -4,7 +4,7 @@ import { verifyEmailSchema } from '@/libs/validations/auth';
 import { UserModel } from '@/libs/db/models';
 import { ApiError } from '@/libs/utils/error';
 
-export const POST = validateBody(verifyEmailSchema)(async (
+export const GET = async (
     request: NextRequest,
     { params }: { params: Promise<{ token: string }> }
 ) => {
@@ -15,10 +15,37 @@ export const POST = validateBody(verifyEmailSchema)(async (
         throw new ApiError('Invalid or expired verification token', 400);
     }
 
-    await UserModel.update(user.id, {
-        emailVerified: true,
-        verificationToken: null,
+    return NextResponse.json({
+        message: 'Email verified successfully',
+        user: {
+            id: user.id,
+            email: user.email,
+            emailVerified: true
+        }
     });
+};
 
-    return NextResponse.json({ message: 'Email verified successfully' });
-});
+export const POST = async (
+    request: NextRequest,
+    { params }: { params: Promise<{ token: string }> }
+) => {
+    const { token } = await params;
+
+    if (!token) {
+        throw new ApiError('Verification token is required', 400);
+    }
+
+    const user = await UserModel.verifyEmail(token);
+    if (!user) {
+        throw new ApiError('Invalid or expired verification token', 400);
+    }
+
+    return NextResponse.json({
+        message: 'Email verified successfully',
+        user: {
+            id: user.id,
+            email: user.email,
+            emailVerified: user.emailVerified
+        }
+    });
+};
